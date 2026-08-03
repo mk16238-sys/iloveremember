@@ -15,7 +15,8 @@
 
   // ---- 状态 ----
   let state = loadState();
-  let wordLoop = null; // { token, btn, text }
+  let wordLoop = null; // { btn, text }
+  let newsSpeak = null; // 新闻朗读状态 { btn } — 用于播放/暂停切换
   function loadState() {
     try { return JSON.parse(localStorage.getItem(LS_KEY)) || {}; }
     catch (e) { return {}; }
@@ -75,7 +76,8 @@
     t.addEventListener("click", function () { switchPage(t.dataset.page); });
   });
   function switchPage(p) {
-    stopWordLoop();
+    stopWordPlay();
+    if (newsSpeak) stopNewsSpeak();
     document.querySelectorAll(".page").forEach(function (s) { s.classList.remove("active"); });
     document.getElementById("page-" + p).classList.add("active");
     tabs.forEach(function (t) { t.classList.toggle("active", t.dataset.page === p); });
@@ -214,17 +216,13 @@
         toggleLearned(+b.dataset.i, viewport);
       });
     });
-    // 大圆播放：循环播放单词发音
+    // 大圆播放：点击一次朗读一次单词
     viewport.querySelectorAll(".wc-circle-play").forEach(function (btn) {
       btn.addEventListener("click", function (e) {
         e.stopPropagation();
         const i = +btn.dataset.i;
         const w = WORD_UNITS[unitForDate(todayStr)].words[i];
-        if (wordLoop && wordLoop.btn === btn) {
-          stopWordLoop();
-          return;
-        }
-        startWordLoop(w.word, btn);
+        playWordCard(w.word, btn);
       });
     });
     // 例句小喇叭：只播例句
@@ -281,7 +279,7 @@
   }
 
   function goToSlide(i, animate) {
-    stopWordLoop();
+    stopWordPlay();
     if (animate === undefined) animate = true;
     curWordIdx = Math.max(0, Math.min(i, 9));
     const viewport = document.getElementById("wordViewport");
@@ -547,6 +545,7 @@
     }
 
     const main = document.getElementById("newsMain");
+    if (newsSpeak) stopNewsSpeak(); // 重新渲染时旧按钮已销毁，先清状态
     let html = '';
     html += '<div class="news-head">' +
       '<span class="nh-day">' + (isToday ? "TODAY · " : "") + curNewsDate + '</span>' +
@@ -561,8 +560,8 @@
 
     const plain = a.content.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
     html += '<div class="news-actions">' +
-      '<button class="news-btn primary" id="newsSpeakAll">🔊 朗读全文</button>' +
-      '<button class="news-btn" id="newsSpeakTitle">📖 朗读标题</button>' +
+      '<button class="news-btn primary" id="newsSpeakAll" data-label="🔊 朗读全文">🔊 朗读全文</button>' +
+      '<button class="news-btn" id="newsSpeakTitle" data-label="📖 朗读标题">📖 朗读标题</button>' +
     '</div>';
 
     html += '<div class="article">' + a.content + '</div>';
@@ -592,20 +591,18 @@
       b.textContent = "🔊";
       b.title = "朗读本段";
       b.addEventListener("click", function (e) { e.stopPropagation(); speak(txt); });
-      p.appendChild(" "); p.appendChild(b);
+      p.appendChild(document.createTextNode(" "));
+      p.appendChild(b);
     });
 
     document.getElementById("newsSpeakAll").addEventListener("click", function (e) {
       const btn = e.currentTarget;
-      flashSpeakBtn(btn, "正在朗读…");
-      // iOS Safari 对长 utterance 会不发声，拆成句子串
       const chunks = splitTextForSpeech(plain, 140);
-      speakSeq(chunks.length ? chunks : [plain]);
+      toggleNewsSpeak(btn, chunks.length ? chunks : [plain]);
     });
     document.getElementById("newsSpeakTitle").addEventListener("click", function (e) {
       const btn = e.currentTarget;
-      flashSpeakBtn(btn, "正在朗读…");
-      speakSeq([a.title]);
+      toggleNewsSpeak(btn, [a.title]);
     });
 
     // .vocab 点击统一走 #newsMain 上的事件委托（见 initVocabDelegation）
@@ -797,6 +794,7 @@
 
   function speak(text, onend) {
     if (!text) { onend && onend(); return; }
+    if (newsSpeak) stopNewsSpeak(); // 朗读单词/标红词时，停掉新闻朗读并复位按钮
     if (!window.speechSynthesis) { showToast("此设备不支持语音合成"); onend && onend(); return; }
     window.speechSynthesis.cancel();
     ensureVoices(function (v) {
@@ -820,18 +818,25 @@
     window.speechSynthesis.cancel();
     ensureVoices(function (v) {
       if (!v) { showToast("未检测到英文语音"); onend && onend(); return; }
-      let idx = 0;
-      function next() {
-        if (idx >= arr.length) { onend && onend(); return; }
-        const u = new SpeechSynthesisUtterance(arr[idx++]);
+      // iOS Safari 要求所有 speak() 必须在同一次用户手势里调用，
+      // 所以这里一次性把所有 utterance 都 speak() 入队，而不是在 onend 里再调。
+      const list = arr.filter(function (t) { return t && t.trim && t.trim(); });
+      if (!list.length) { onend && onend(); return; }
+      let pending = list.length;
+      function doneOne() {
+        pending--;
+        if (pending <= 0 && onend) onend();
+      }
+      list.forEach(function (text, i) {
+        const u = new SpeechSynthesisUtterance(text);
         u.lang = v.lang || "en-US";
         u.rate = 0.9;
         u.pitch = 1.05;
         u.voice = v;
-        u.onend = next;
+        u.onend = doneOne;
+        u.onerror = doneOne;
         window.speechSynthesis.speak(u);
-      }
-      next();
+      });
     });
   }
 
@@ -849,33 +854,117 @@
     }, 1800);
   }
 
-  // ---- 单词循环播放（大圆 ♪ 按钮）----
-  function startWordLoop(text, btn) {
-    stopWordLoop();
-    const loop = { token: {}, text: text, btn: btn };
-    wordLoop = loop;
-    btn.classList.add("is-looping");
+  // ---- 单词卡片朗读（大圆 ♪ 按钮）：点击一次朗读一次，再点停止 ----
+  function resetWordPlayBtn(btn) {
+    if (!btn || !btn.classList) return;
+    btn.classList.remove("is-playing");
     const icon = btn.querySelector(".play-icon");
-    if (icon) icon.textContent = "⏸";
-    function one() {
-      if (wordLoop !== loop) return;
-      speak(text, function () {
-        if (wordLoop !== loop) return;
-        setTimeout(one, 750);
-      });
-    }
-    one();
+    if (icon) icon.textContent = "♪";
   }
-  function stopWordLoop() {
+  function stopWordPlay() {
     if (!wordLoop) return;
     const btn = wordLoop.btn;
     wordLoop = null;
     window.speechSynthesis.cancel();
-    if (btn && btn.classList) {
-      btn.classList.remove("is-looping");
-      const icon = btn.querySelector(".play-icon");
-      if (icon) icon.textContent = "♪";
+    resetWordPlayBtn(btn);
+  }
+  function playWordCard(text, btn) {
+    // 如果同一按钮正在播放，点击则停止
+    if (wordLoop && wordLoop.btn === btn) {
+      stopWordPlay();
+      return;
     }
+    // 停止其他按钮的播放
+    stopWordPlay();
+    wordLoop = { btn: btn, text: text };
+    btn.classList.add("is-playing");
+    const icon = btn.querySelector(".play-icon");
+    if (icon) icon.textContent = "⏸";
+    speak(text, function () {
+      if (wordLoop && wordLoop.btn === btn) {
+        wordLoop = null;
+        resetWordPlayBtn(btn);
+      }
+    });
+  }
+
+  // ---- 新闻朗读：播放 / 暂停 / 继续 切换 ----
+  // 注意：iOS Safari 的 speechSynthesis.pause()/resume() 不可靠，
+  // 所以这里用「cancel 停声 + 记录当前句下标 + 从当前句重新入队」实现真暂停。
+  function stopNewsSpeak() {
+    if (!newsSpeak) return;
+    const btn = newsSpeak.btn;
+    newsSpeak = null;
+    window.speechSynthesis.cancel();
+    if (btn && btn.classList) {
+      btn.textContent = btn.dataset.label || "🔊 朗读全文";
+      btn.classList.remove("is-speaking");
+    }
+  }
+  // 一次性把整段文本全部入队（沿用 v20 验证过在 iPhone 上能连续读的机制），
+  // 并通过 onstart 记录当前播到第几句，供暂停后从断点继续。
+  function speakNewsList(list, gen, onAllEnd) {
+    if (!window.speechSynthesis) { showToast("此设备不支持语音合成"); onAllEnd(); return; }
+    window.speechSynthesis.cancel();
+    ensureVoices(function (v) {
+      if (!v) { showToast("未检测到英文语音"); onAllEnd(); return; }
+      const real = list.filter(function (t) { return t && t.trim; });
+      if (!real.length) { onAllEnd(); return; }
+      let pending = real.length;
+      function done() {
+        pending--;
+        if (pending <= 0 && onAllEnd) onAllEnd();
+      }
+      real.forEach(function (text, i) {
+        const u = new SpeechSynthesisUtterance(text);
+        u.lang = v.lang || "en-US";
+        u.rate = 0.9;
+        u.pitch = 1.05;
+        u.voice = v;
+        u.onstart = function () { if (newsSpeak && newsSpeak.gen === gen) newsSpeak.idx = i; };
+        u.onend = function () { if (newsSpeak && newsSpeak.gen === gen) done(); };
+        u.onerror = u.onend;
+        window.speechSynthesis.speak(u);
+      });
+    });
+  }
+  function toggleNewsSpeak(btn, texts) {
+    // 同一按钮且正在朗读 → 切换 暂停 / 继续
+    if (newsSpeak && newsSpeak.btn === btn) {
+      if (newsSpeak.state === "playing") {
+        // 暂停：直接 cancel 停声（iPhone 上最可靠）
+        newsSpeak.state = "paused";
+        window.speechSynthesis.cancel();
+        btn.textContent = "▶ 继续";
+        return;
+      }
+      if (newsSpeak.state === "paused") {
+        // 继续：从当前句重新入队
+        newsSpeak.state = "playing";
+        btn.textContent = "⏸ 暂停";
+        const gen = ++newsSpeak.gen; // 失效旧队列的回调
+        speakNewsList(texts.slice(newsSpeak.idx), gen, function () {
+          if (newsSpeak && newsSpeak.btn === btn && newsSpeak.state === "playing" && newsSpeak.gen === gen) {
+            newsSpeak = null;
+            btn.textContent = btn.dataset.label || "🔊 朗读全文";
+            btn.classList.remove("is-speaking");
+          }
+        });
+        return;
+      }
+    }
+    // 全新开始
+    stopNewsSpeak();
+    newsSpeak = { btn: btn, list: texts, idx: 0, state: "playing", gen: 1 };
+    btn.textContent = "⏸ 暂停";
+    btn.classList.add("is-speaking");
+    speakNewsList(texts, 1, function () {
+      if (newsSpeak && newsSpeak.btn === btn && newsSpeak.state === "playing" && newsSpeak.gen === 1) {
+        newsSpeak = null;
+        btn.textContent = btn.dataset.label || "🔊 朗读全文";
+        btn.classList.remove("is-speaking");
+      }
+    });
   }
 
   // ---- 长文本分块（避免 iOS 长 utterance 不发声）----
