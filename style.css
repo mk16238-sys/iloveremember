@@ -531,6 +531,30 @@ body::after {
   line-height: 1.5;
   font-family: 'Noto Sans SC', sans-serif;
 }
+.wc-example-play {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  border: 1px solid rgba(26,34,56,0.08);
+  background: rgba(255,255,255,0.65);
+  color: var(--ink-2);
+  font-size: 11px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s;
+  box-shadow: 0 2px 6px rgba(26,34,56,0.06);
+}
+.wc-example-play:active { transform: scale(0.92); }
+.wc-example-play.is-playing {
+  background: linear-gradient(135deg, var(--accent) 0%, var(--accent-2) 100%);
+  color: white;
+  border-color: transparent;
+}
 
 /* ============= 底部：大圆形播放 + 掌握按钮（仿音乐 App 控件） ============= */
 .wc-controls {
@@ -617,7 +641,8 @@ body::after {
   pointer-events: none;
 }
 .wc-circle-play:active { transform: scale(0.95); }
-.wc-circle-play.is-playing {
+.wc-circle-play.is-playing,
+.wc-circle-play.is-looping {
   background: linear-gradient(135deg, var(--accent) 0%, var(--accent-2) 100%);
   box-shadow:
     0 0 0 5px rgba(255,255,255,0.5),
