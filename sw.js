@@ -1,7 +1,7 @@
 // Aussie 10 - Service Worker
 // 离线缓存策略：cache-first（已缓存优先，回网络兜底）
 
-const CACHE_NAME = 'aussie10-v3-2026-08-03-v19';
+const CACHE_NAME = 'aussie10-v3-2026-08-03-v22';
 const PRECACHE = [
   './',
   './index.html',
