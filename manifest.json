@@ -1,0 +1,47 @@
+{
+  "name": "Aussie 10 · 澳洲旅游每日单词",
+  "short_name": "Aussie 10",
+  "description": "为年底澳洲旅游准备的每日 10 词 + 外刊阅读 H5 应用",
+  "start_url": "./?utm_source=pwa",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#C8D4F2",
+  "theme_color": "#C8D4F2",
+  "lang": "zh-CN",
+  "categories": ["education", "lifestyle", "travel"],
+  "icons": [
+    {
+      "src": "icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icons/apple-touch-icon.png",
+      "sizes": "180x180",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "今日单词",
+      "url": "./#today?utm_source=shortcut"
+    },
+    {
+      "name": "往期回顾",
+      "url": "./#archive?utm_source=shortcut"
+    },
+    {
+      "name": "外刊阅读",
+      "url": "./#news?utm_source=shortcut"
+    }
+  ]
+}

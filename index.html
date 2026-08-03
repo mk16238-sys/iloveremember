@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <!-- PWA 视口：viewport-fit=cover 让内容延伸到 iPhone 全面屏的安全区 -->
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <!-- 浏览器状态栏颜色（Android Chrome + iOS Safari） -->
+  <meta name="theme-color" content="#C8D4F2" media="(prefers-color-scheme: light)" />
+  <meta name="theme-color" content="#0E1A30" media="(prefers-color-scheme: dark)" />
+
+  <!-- PWA 关键 meta：让 iOS Safari 把网页当成原生 App（无地址栏/工具栏） -->
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-title" content="Aussie 10" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <!-- Android Chrome -->
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="application-name" content="Aussie 10" />
+  <!-- iOS 黑底状态栏（如果想要沉浸式深色可改 black-translucent） -->
+  <!-- <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" /> -->
+
+  <!-- 图标 -->
+  <link rel="icon" type="image/png" sizes="16x16" href="icons/favicon-16.png" />
+  <link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32.png" />
+  <link rel="icon" type="image/png" sizes="64x64" href="icons/favicon-64.png" />
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png" />
+  <!-- PWA manifest -->
+  <link rel="manifest" href="manifest.json" />
+
+  <!-- iOS 启动画面（可选，避免白屏） -->
+  <link rel="apple-touch-startup-image" href="icons/icon-512.png" />
+
+  <title>Aussie 10 · 澳洲旅游每日单词</title>
+  <meta name="description" content="为年底澳洲旅游准备的每日 10 词 + 外刊阅读 H5 应用。" />
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700&family=Noto+Sans+SC:wght@300;400;500;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+  <main id="app">
+    <!-- ============= 今日单词 ============= -->
+    <section class="page active" id="page-today">
+      <!-- 飞行进度条（飞机从左飞往右端澳洲国旗，每掌握一格前进一段） -->
+      <div class="flight-bar" id="flightBar">
+        <!-- 连续横条：左橙灰底 + 飞机 + 终点国旗 -->
+        <div class="flight-track">
+          <div class="track-bg"></div>
+          <div class="track-fill" id="trackFill"></div>
+        </div>
+        <!-- 飞机 -->
+        <div class="flight-plane" id="flightPlane">✈️</div>
+        <!-- 终点：澳洲国旗 -->
+        <div class="flight-goal" id="flightGoal" title="Australia 🇦🇺">
+          <span class="flag">🇦🇺</span>
+        </div>
+      </div>
+
+      <!-- 顶部文字元信息 -->
+      <div class="top-meta">
+        <div class="tm-left">
+          <span class="tm-progress" id="progressText">0 / 10</span>
+          <span class="tm-label">已掌握 · 今日打卡</span>
+        </div>
+        <div class="tm-right" id="todayDate">—</div>
+      </div>
+
+      <!-- 主题头 -->
+      <div class="today-head">
+        <span class="th-mascot" id="todayMascot">🐨</span>
+        <div class="th-date" id="todayDayNo">—</div>
+        <div class="th-theme" id="todayTheme">—</div>
+        <div class="th-num" id="todayUnit">—</div>
+      </div>
+
+      <!-- 单卡片横向滑动 -->
+      <div class="word-slider" id="wordSlider">
+        <div class="word-viewport" id="wordViewport"></div>
+      </div>
+      <div class="word-dots" id="wordDots"></div>
+      <div class="word-counter" id="wordCounter">— / 10</div>
+    </section>
+
+    <!-- ============= 往期 ============= -->
+    <section class="page" id="page-archive">
+      <div class="section-title">
+        <span>Past Days</span>
+        <span class="st-stamp">ARCHIVE</span>
+      </div>
+      <p class="hint">点开任意一天，回顾那天的 10 词。</p>
+      <div class="archive-list" id="archiveList"></div>
+    </section>
+
+    <!-- ============= 新闻 ============= -->
+    <section class="page" id="page-news">
+      <div class="section-title">
+        <span>Today's Read</span>
+        <span class="st-stamp">JOURNAL</span>
+      </div>
+
+      <div class="news-picker" id="newsPicker"></div>
+
+      <article class="news-main" id="newsMain"></article>
+    </section>
+  </main>
+
+  <!-- 底部导航（中间为「今日」浮起按钮） -->
+  <nav class="tabbar">
+    <button class="tab" data-page="archive">
+      <span class="ico">📅</span>
+      <span>往期</span>
+    </button>
+    <button class="tab main active" data-page="today">
+      <span class="ico">📘</span>
+      <span>TODAY</span>
+    </button>
+    <button class="tab" data-page="news">
+      <span class="ico">📰</span>
+      <span>新闻</span>
+    </button>
+  </nav>
+
+  <!-- 通用弹窗 -->
+  <div class="modal" id="modal">
+    <div class="modal-mask" data-close></div>
+    <div class="modal-card" id="modalCard"></div>
+  </div>
+
+  <script src="data.js"></script>
+  <script src="app.js"></script>
+  <script>
+    // 注册 Service Worker（让 H5 可"安装"到主屏幕 + 离线访问）
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', function () {
+        navigator.serviceWorker.register('./sw.js').catch(function (err) {
+          console.warn('SW 注册失败：', err);
+        });
+      });
+    }
+  </script>
+</body>
+</html>
