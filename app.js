@@ -15,6 +15,7 @@
 
   // ---- 状态 ----
   let state = loadState();
+  let wordLoop = null; // { token, btn, text }
   function loadState() {
     try { return JSON.parse(localStorage.getItem(LS_KEY)) || {}; }
     catch (e) { return {}; }
@@ -74,6 +75,7 @@
     t.addEventListener("click", function () { switchPage(t.dataset.page); });
   });
   function switchPage(p) {
+    stopWordLoop();
     document.querySelectorAll(".page").forEach(function (s) { s.classList.remove("active"); });
     document.getElementById("page-" + p).classList.add("active");
     tabs.forEach(function (t) { t.classList.toggle("active", t.dataset.page === p); });
@@ -184,6 +186,7 @@
         '<div class="wc-meaning">' + esc(w.meaning) + '</div>' +
         '<div class="wc-example">' +
           '<span class="wc-example-label">✦ EXAMPLE</span>' +
+          '<button class="wc-example-play" data-i="' + i + '" title="朗读例句">♪</button>' +
           '<div class="wc-example-en">' + esc(w.example) + '</div>' +
           '<div class="wc-example-cn">' + esc(w.exampleZh) + '</div>' +
         '</div>' +
@@ -192,8 +195,8 @@
             '<span class="check">' + (isLearned ? '✓' : '') + '</span>' +
             '<span>' + (isLearned ? '已掌握' : '标记掌握') + '</span>' +
           '</button>' +
-          '<button class="wc-circle-play" data-i="' + i + '" title="朗读单词和例句">' +
-            '<span class="play-icon">▶</span>' +
+          '<button class="wc-circle-play" data-i="' + i + '" title="循环播放单词发音">' +
+            '<span class="play-icon">♪</span>' +
           '</button>' +
         '</div>';
       viewport.appendChild(card);
@@ -211,18 +214,26 @@
         toggleLearned(+b.dataset.i, viewport);
       });
     });
-    // 大圆播放
+    // 大圆播放：循环播放单词发音
     viewport.querySelectorAll(".wc-circle-play").forEach(function (btn) {
-      btn.addEventListener("click", function () {
+      btn.addEventListener("click", function (e) {
+        e.stopPropagation();
         const i = +btn.dataset.i;
         const w = WORD_UNITS[unitForDate(todayStr)].words[i];
-        btn.classList.add("is-playing");
-        btn.querySelector(".play-icon").textContent = "♪";
-        flashSpeakBtn(btn, "♪…");
-        speakSeq([w.word, w.example], function () {
-          btn.classList.remove("is-playing");
-          btn.querySelector(".play-icon").textContent = "▶";
-        });
+        if (wordLoop && wordLoop.btn === btn) {
+          stopWordLoop();
+          return;
+        }
+        startWordLoop(w.word, btn);
+      });
+    });
+    // 例句小喇叭：只播例句
+    viewport.querySelectorAll(".wc-example-play").forEach(function (btn) {
+      btn.addEventListener("click", function (e) {
+        e.stopPropagation();
+        const i = +btn.dataset.i;
+        const w = WORD_UNITS[unitForDate(todayStr)].words[i];
+        speak(w.example);
       });
     });
 
@@ -270,6 +281,7 @@
   }
 
   function goToSlide(i, animate) {
+    stopWordLoop();
     if (animate === undefined) animate = true;
     curWordIdx = Math.max(0, Math.min(i, 9));
     const viewport = document.getElementById("wordViewport");
@@ -583,15 +595,17 @@
       p.appendChild(" "); p.appendChild(b);
     });
 
-    document.getElementById("newsSpeakAll").addEventListener("click", function (b) {
-      const btn = b.currentTarget;
+    document.getElementById("newsSpeakAll").addEventListener("click", function (e) {
+      const btn = e.currentTarget;
       flashSpeakBtn(btn, "正在朗读…");
-      speak(plain);
+      // iOS Safari 对长 utterance 会不发声，拆成句子串
+      const chunks = splitTextForSpeech(plain, 140);
+      speakSeq(chunks.length ? chunks : [plain]);
     });
-    document.getElementById("newsSpeakTitle").addEventListener("click", function (b) {
-      const btn = b.currentTarget;
+    document.getElementById("newsSpeakTitle").addEventListener("click", function (e) {
+      const btn = e.currentTarget;
       flashSpeakBtn(btn, "正在朗读…");
-      speak(a.title);
+      speakSeq([a.title]);
     });
 
     // .vocab 点击统一走 #newsMain 上的事件委托（见 initVocabDelegation）
@@ -833,6 +847,56 @@
       btn.disabled = false;
       btn.classList.remove("is-speaking");
     }, 1800);
+  }
+
+  // ---- 单词循环播放（大圆 ♪ 按钮）----
+  function startWordLoop(text, btn) {
+    stopWordLoop();
+    const loop = { token: {}, text: text, btn: btn };
+    wordLoop = loop;
+    btn.classList.add("is-looping");
+    const icon = btn.querySelector(".play-icon");
+    if (icon) icon.textContent = "⏸";
+    function one() {
+      if (wordLoop !== loop) return;
+      speak(text, function () {
+        if (wordLoop !== loop) return;
+        setTimeout(one, 750);
+      });
+    }
+    one();
+  }
+  function stopWordLoop() {
+    if (!wordLoop) return;
+    const btn = wordLoop.btn;
+    wordLoop = null;
+    window.speechSynthesis.cancel();
+    if (btn && btn.classList) {
+      btn.classList.remove("is-looping");
+      const icon = btn.querySelector(".play-icon");
+      if (icon) icon.textContent = "♪";
+    }
+  }
+
+  // ---- 长文本分块（避免 iOS 长 utterance 不发声）----
+  function splitTextForSpeech(text, maxLen) {
+    if (!text) return [];
+    maxLen = maxLen || 150;
+    const sentences = text.match(/[^.!?。！？]+[.!?。！？]+|[^.!?。！？]+$/g) || [text];
+    const chunks = [];
+    let cur = "";
+    sentences.forEach(function (s) {
+      s = s.trim();
+      if (!s) return;
+      if ((cur + " " + s).length <= maxLen) {
+        cur = cur ? cur + " " + s : s;
+      } else {
+        if (cur) chunks.push(cur);
+        cur = s;
+      }
+    });
+    if (cur) chunks.push(cur);
+    return chunks.length ? chunks : [text];
   }
 
   function showToast(msg) {
